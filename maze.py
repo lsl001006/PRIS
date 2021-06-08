@@ -9,12 +9,14 @@ MAP = []
 mapSize = 10
 Step = 0
 PATH = []
+# 定义以下数值的目的为方便绘图
 pass_stat = 0  # 如果是通路，状态为0
-srt_stat = -1  # 如果是起点，状态为 2
-obs_stat = 1  # 如果是障碍物，状态为1
-end_stat = 2  # 如果是终点，状态为 2
+srt_stat = 2  # 如果是起点，状态为 2
+obs_stat = 1.3  # 如果是障碍物，状态为1.3
+end_stat = 3  # 如果是终点，状态为 3
 
 
+# 定义节点node类，包含了迷宫格中所有必须的信息
 class node:
     def __init__(self, x, y, stat):
         self.x = x
@@ -35,10 +37,10 @@ def obstacleMap(boolean=False):
     :return:(list) obsMap:障碍物地图
     """
     if not boolean:
-        obsMap = [[] for _ in range(13)]
-        for i in range(13):
-            x = rd.randint(1, 10)
-            y = rd.randint(1, 10)
+        obsMap = [[] for _ in range(mapSize+3)]
+        for i in range(mapSize+3):
+            x = rd.randint(1, mapSize)
+            y = rd.randint(1, mapSize)
             if [x, y] in obsMap:
                 i = i - 1
                 continue
@@ -78,7 +80,7 @@ def mapInit(size, startPoint=[2, 2], endPoint=[8, 8], UseDefalutMap=True):
     return MAP
 
 
-def h(thisNode, endNode, method='dig'):
+def h(thisNode, endNode, method='eu'):
     """
     启发式函数，计算此点到终点的预计损失
     :param (node) thisNode: 当前点[xn,yn]
@@ -90,11 +92,11 @@ def h(thisNode, endNode, method='dig'):
     [xe, ye] = [endNode.x, endNode.y]
     dx = abs(xe - xn)
     dy = abs(ye - yn)
-    if method == 'dig':
+    if method == 'dig':  # 对角距离
         loss = dx + dy + (sqrt(2) - 2) * min(dx, dy)
-    elif method == 'mah':
+    elif method == 'mah':  # 曼哈顿距离
         loss = dx + dy
-    else:
+    else:  # 欧几里得距离
         loss = sqrt(dx ** 2 + dy ** 2)
     return loss
 
@@ -102,36 +104,37 @@ def h(thisNode, endNode, method='dig'):
 def g(dx, dy):
     """
     计算距离上一个节点的移动损失
-    :param dx: 相较上一个节点的偏移量x
-    :param dy: 相较上一个节点的偏移量y
-    :return:res
+    :param (int) dx: 相较上一个节点的偏移量x
+    :param (int) dy: 相较上一个节点的偏移量y
+    :return:(float) res: 距离上一个节点的移动损失
     """
     if dx != 0 and dy != 0:
         res = sqrt(2)
     else:
-        res = 1
+        res = 1.0
     return res
 
 
 def observeAround(Node):
     """
     观察周围节点状态,返回可通行节点
-    :param (node) Node: [xn,yn]
-    :return: (list) passlist: [node]
+    :param (node) Node: 当前节点
+    :return: (list) passlist: [node1, node2,...] 当前节点周围的可通行节点
     """
     global MAP
     [xn, yn] = [Node.x, Node.y]
     passlist = []
     for x in range(-1, 2):
         for y in range(-1, 2):
-            if y + yn < 0 or y + yn >= 10 or x + xn < 0 or x + xn >= 10:
+            # 将搜索范围限制在地图范围内
+            if y + yn < 0 or y + yn >= mapSize or x + xn < 0 or x + xn >= mapSize:
                 continue
+            # 当周围节点不是障碍点 且 没有被搜索过 且 不是中心节点的时候，认为是可通行节点
             elif MAP[x + xn][y + yn].stat != obs_stat and MAP[x + xn][y + yn].searched == 0 \
                     and not (xn == 0 and yn == 0):
-                MAP[x + xn][y + yn].parent = Node
-                MAP[x + xn][y + yn].searched = 1
-                MAP[x + xn][y + yn].g = g(x, y) + Node.g
-                passlist.append(MAP[x + xn][y + yn])
+                MAP[x + xn][y + yn].searched = 1   # 将节点属性设置为“已搜索过”
+                MAP[x + xn][y + yn].g = g(x, y) + Node.g  # 计算此节点的g函数值
+                passlist.append(MAP[x + xn][y + yn])  # 存入passlist
     return passlist
 
 
@@ -155,21 +158,17 @@ def UseIsPath(Node1):
 
 def trackPath(Node):
     """
-    追踪路径
+    路径回溯，从终止节点回溯到起始节点，构成路径
     :param (node) Node:当前节点
     :return:
     """
     global Step
     global PATH
     Step += 1
-
     if Node.parent is not None:
-        if Node.parent.parent == Node:
-            Node.parent.parent = None
         Node.IsPath = Step
         PATH.append(Node)
-        if Node.parent is not None:
-            trackPath(Node.parent)
+        trackPath(Node.parent)
     else:
         PATH.append(Node)
         Node.IsPath = Step
@@ -186,12 +185,13 @@ def aStar(size, startPoint=[2, 2], endPoint=[8, 8], UseDefalutMap=True, method='
     :return:
     """
     global MAP
-    opn = []  # opn[i][0]为存储的节点坐标，opn[i][1]为存储的节点优先级
-    cls = []
+    opn = []  # open set
+    cls = []  # close set
     flg = 0  # 监测是否搜索到终点
     [xb, yb] = startPoint
     [xe, ye] = endPoint
-    MAP = mapInit(size, startPoint=startPoint, endPoint=endPoint, UseDefalutMap=UseDefalutMap)
+    MAP = mapInit(size, startPoint=startPoint, endPoint=endPoint,
+                  UseDefalutMap=UseDefalutMap)
     srtNode = MAP[xb][yb]
     endNode = MAP[xe][ye]
     opn.append(srtNode)
@@ -207,10 +207,10 @@ def aStar(size, startPoint=[2, 2], endPoint=[8, 8], UseDefalutMap=True, method='
                     if eachNode in cls:
                         continue
                     elif eachNode not in opn:
+                        eachNode.parent = curNode
                         eachNode.h = h(eachNode, endNode, method)
                         eachNode.prior = eachNode.g + eachNode.h
                         opn.append(eachNode)
-                print('step')
             else:
                 trackPath(endNode)
                 flg = 1
@@ -252,6 +252,10 @@ def plotTrace(maps):
     plt.title('Original Map')
     for each in PATH:  # 为路径上深色
         MP[each.y][each.x] = 2
+    for x in range(mapSize):  # 为搜索过的路径涂浅色
+        for y in range(mapSize):
+            if maps[x][y].searched == 1 and maps[x][y] not in PATH:
+                MP[y][x] = 0.5
     plt.subplot(1, 2, 2)
     plt.imshow(MP, cmap=plt.cm.Blues)
     plt.title('Searched Path')
@@ -259,4 +263,5 @@ def plotTrace(maps):
 
 
 if __name__ == '__main__':
-    aStar(mapSize, startPoint=[8, 0], endPoint=[4, 9], method='dig')
+    # startPoint为起始点，endPoint为终点，method为使用的启发函数缩写
+    aStar(mapSize, startPoint=[2, 2], endPoint=[8, 8], method='mah', UseDefalutMap=True)
